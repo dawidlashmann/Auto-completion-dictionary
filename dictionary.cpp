@@ -2,7 +2,9 @@
 #include <unordered_map>
 #include <vector>
 #include <fstream>
+#include <utility>
 
+// Struct of each node
 struct TrieNode
 {
     bool is_end_of_word = false;
@@ -31,6 +33,7 @@ private:
 
 Trie::Trie(const std::string &filename)
 {
+    // read from database file
     root = new TrieNode;
     database.open(filename, std::ios::in);
     if (database.is_open())
@@ -40,24 +43,30 @@ Trie::Trie(const std::string &filename)
         {
             this->add(temp);
         }
+        database.close();
+        // open file to write to
+        database.open(filename, std::ios::out | std::ios::trunc);
     }
-    database.close();
-    database.open(filename, std::ios::trunc);
 }
 
 Trie::~Trie()
 {
-    for (auto &node : root->children)
+    // write to file
+    if (database.is_open())
     {
-        std::string temp(1, node.first);
-        for (auto word : this->candidates(temp))
+        for (auto &node : root->children)
         {
-            database << word << std::endl;
+            std::string temp(1, node.first);
+            for (auto word : this->candidates(temp))
+            {
+                database << word << std::endl;
+            }
         }
+        database.close();
     }
-    database.close();
 }
 
+// add word to the TrieNode Tree
 void Trie::add(const std::string &word)
 {
     TrieNode *current_node = root;
@@ -72,10 +81,11 @@ void Trie::add(const std::string &word)
     current_node->is_end_of_word = true;
 }
 
+// remove word from TrieNode tree
 void Trie::remove(const std::string &word)
 {
     TrieNode *current_node = root;
-    std::vector<TrieNode *> path;
+    std::vector<std::pair<char, TrieNode *>> path;
     path.reserve(word.length());
     for (char letter : word)
     {
@@ -84,14 +94,17 @@ void Trie::remove(const std::string &word)
             std::cout << "This word is not in the database\n";
             return;
         }
+        path.emplace_back(std::pair<char, TrieNode *>{letter, current_node});
         current_node = current_node->children[letter];
-        path.emplace_back(current_node);
     }
     current_node->is_end_of_word = false;
     for (int node = path.size() - 1; node >= 0; node--)
     {
-        if (path.at(node)->children.empty())
+        // if node in path does not have any childrens free allocated memory
+        if (path.at(node).second->children[path.at(node).first]->children.empty() && !path.at(node).second->children[path.at(node).first]->is_end_of_word)
         {
+            delete path.at(node).second->children[path.at(node).first];
+            path.at(node).second->children.erase(path.at(node).first);
         }
         else
         {
@@ -100,6 +113,7 @@ void Trie::remove(const std::string &word)
     }
 }
 
+// returns vector of candidate words
 std::vector<std::string> Trie::candidates(const std::string &query)
 {
     std::vector<std::string> auto_completed_queries;
@@ -119,6 +133,7 @@ std::vector<std::string> Trie::candidates(const std::string &query)
     return auto_completed_queries;
 }
 
+// traverse through the TrieNode Tree
 void Trie::traverse(TrieNode *current_node, const std::string &prefix, const std::string &current_txt, std::vector<std::string> &result)
 {
     if (current_node->is_end_of_word)
@@ -133,29 +148,52 @@ void Trie::traverse(TrieNode *current_node, const std::string &prefix, const std
 
 int main()
 {
-    Trie dictionary("databa.txt");
-    dictionary.add("car");
-    dictionary.add("carpet");
-    dictionary.add("java");
-    dictionary.add("javascript");
-    dictionary.add("internet");
-    dictionary.add("foo");
-    dictionary.remove("foo");
+    Trie dictionary("database.txt");
 
-    while (!std::cin.fail())
+    bool loop = 1;
+    while (loop)
     {
         system("clear");
-        //system("cls");
+        // system("cls");
         std::string query;
-        std::cout << "Type in your query:\n";
-        std::cin >> query;
-        std::cout << "\nCandidates:\n";
-        for (auto word : dictionary.candidates(query))
+        int choice;
+        std::cout << "Select action:\n"
+                  << "1 - add word to database\n"
+                  << "2 - remove word from database\n"
+                  << "3 - Show query candidates\n\n"
+                  << "0 - exit\n\n";
+        std::cin >> choice;
+
+        switch (choice)
         {
-            std::cout << word << std::endl;
+        case 0:
+            loop = 0;
+            break;
+        case 1:
+            std::cout << "Type in a word to add:\n";
+            std::cin >> query;
+            dictionary.add(query);
+            break;
+        case 2:
+            std::cout << "Type in a word to remove:\n";
+            std::cin >> query;
+            dictionary.remove(query);
+            break;
+        case 3:
+            std::cout << "Type in your query:\n";
+            std::cin >> query;
+            std::cout << "\nCandidates:\n";
+            for (auto word : dictionary.candidates(query))
+            {
+                std::cout << word << std::endl;
+            }
+            break;
         }
-        std::cin.ignore();
-        std::cout << "\nPress enter to continue...\n";
-        std::cin.get();
+        if (loop)
+        {
+            std::cout << "\nPress enter to continue\n";
+            std::cin.ignore();
+            std::cin.get();
+        }
     }
 }
